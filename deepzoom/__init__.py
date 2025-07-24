@@ -384,6 +384,7 @@ class ImageCreator(object):
         tile_format="jpg",
         image_quality=0.8,
         resize_filter=None,
+        resize_sharper=False,
         copy_metadata=False,
     ):
         self.tile_size = int(tile_size)
@@ -393,6 +394,7 @@ class ImageCreator(object):
         if not tile_format in IMAGE_FORMATS:
             self.tile_format = DEFAULT_IMAGE_FORMAT
         self.resize_filter = resize_filter
+        self.resize_sharper = resize_sharper
         self.copy_metadata = copy_metadata
 
     def get_image(self, level):
@@ -405,8 +407,14 @@ class ImageCreator(object):
         if self.descriptor.width == width and self.descriptor.height == height:
             return self.image
         if (self.resize_filter is None) or (self.resize_filter not in RESIZE_FILTERS):
-            return self.image.resize((width, height), PIL.Image.ANTIALIAS)
-        return self.image.resize((width, height), RESIZE_FILTERS[self.resize_filter])
+            img_resized = self.image.resize((width, height), PIL.Image.ANTIALIAS)
+        else:
+            img_resized = self.image.resize((width, height), RESIZE_FILTERS[self.resize_filter])
+        if (self.resize_sharper):
+            return img_resized.filter(PIL.ImageFilter.UnsharpMask(1.2, 60, 1))
+            #return img_resized.filter(PIL.ImageFilter.UnsharpMask(2, 300, 1))  
+            #return img_resized.filter(PIL.ImageFilter.SHARPEN)  
+        return img_resized
 
     def tiles(self, level):
         """Iterator for all tiles in the given level. Returns (column, row) of a tile."""
@@ -598,7 +606,15 @@ def main():
         default=DEFAULT_RESIZE_FILTER,
         help="Type of filter for resizing (bicubic, nearest, bilinear, antialias (best). Default: antialias",
     )
-
+    parser.add_option(
+        "-rsh"
+        "--resize_sharper",
+        dest="resize_sharper",
+        action="store_true",
+        help="Sharpen image after downsizing when creating new tile level",
+        #TODO pass sharpening parameters
+    )
+    
     (options, args) = parser.parse_args()
 
     if not args:
