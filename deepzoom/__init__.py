@@ -48,6 +48,7 @@ import warnings
 import xml.dom.minidom
 
 import PIL.Image
+import PIL.ImageFilter
 
 from collections import deque
 
