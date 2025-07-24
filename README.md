@@ -1,9 +1,11 @@
+# CHANGES TO THE FORK: Added sharpening after downsizing of the image when creating tile levels.
+
 # deepzoom.py: Python Deep Zoom Tools
 
 ## Installation
 
 ```bash
-git clone https://github.com/openzoom/deepzoom.py.git
+git clone https://github.com/Medwar/deepzoom.py.git
 cd deepzoom.py
 python setup.py install
 ```
