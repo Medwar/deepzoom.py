@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# Python Deep Zoom Tools Mindat
+# Copyright (c) 2025, Pavel Martynov <pavel.bw@gmail.com>
+# Added: Pillow 11 support, webp support, optional sharpening after downscaling.
+# Forked from:
 #
 #  Deep Zoom Tools
 #
@@ -47,7 +51,7 @@ import urllib.request
 import warnings
 import xml.dom.minidom
 
-import PIL.Image
+from PIL import Image
 import PIL.ImageFilter
 
 from collections import deque
@@ -55,20 +59,24 @@ from collections import deque
 
 NS_DEEPZOOM = "http://schemas.microsoft.com/deepzoom/2008"
 
-DEFAULT_RESIZE_FILTER = PIL.Image.ANTIALIAS
+DEFAULT_RESIZE_FILTER = Image.Resampling.LANCZOS
 DEFAULT_IMAGE_FORMAT = "jpg"
 
 RESIZE_FILTERS = {
-    "cubic": PIL.Image.CUBIC,
-    "bilinear": PIL.Image.BILINEAR,
-    "bicubic": PIL.Image.BICUBIC,
-    "nearest": PIL.Image.NEAREST,
-    "antialias": PIL.Image.ANTIALIAS,
+    "nearest": Image.Resampling.NEAREST,
+    "box": Image.Resampling.BOX,
+    "bilinear": Image.Resampling.BILINEAR,
+    "hamming": Image.Resampling.HAMMING,
+    "bicubic": Image.Resampling.BICUBIC,
+    "lanczos": Image.Resampling.LANCZOS,
+    "antialias": Image.Resampling.LANCZOS,  # legacy alias for LANCZOS
+    "cubic": Image.Resampling.BICUBIC,      # commonly used alias for BICUBIC
 }
 
 IMAGE_FORMATS = {
     "jpg": "jpg",
     "png": "png",
+    "webp": "webp",
 }
 
 
@@ -310,14 +318,14 @@ class DeepZoomCollection(object):
                     if w != e_w or h != e_h:
                         # Resize incorrect tile to correct size
                         source_image = source_image.resize(
-                            (e_w, e_h), PIL.Image.ANTIALIAS
+                            (e_w, e_h), RESIZE_FILTERS["lanczos"]
                         )
                         # Store new dimensions
                         w, h = e_w, e_h
                 else:
                     w = int(math.ceil(w * 0.5))
                     h = int(math.ceil(h * 0.5))
-                    source_image.thumbnail((w, h), PIL.Image.ANTIALIAS)
+                    source_image.thumbnail((w, h), RESIZE_FILTERS["lanczos"])
             column, row = self.get_position(i)
             x = (column % images_per_tile) * level_size
             y = (row % images_per_tile) * level_size
@@ -383,7 +391,8 @@ class ImageCreator(object):
         tile_size=254,
         tile_overlap=1,
         tile_format="jpg",
-        image_quality=0.8,
+        image_quality=0.9,
+        webp_method=6,
         resize_filter=None,
         resize_sharper=False,
         copy_metadata=False,
@@ -392,6 +401,7 @@ class ImageCreator(object):
         self.tile_format = tile_format
         self.tile_overlap = _clamp(int(tile_overlap), 0, 10)
         self.image_quality = _clamp(image_quality, 0, 1.0)
+        self.webp_method = _clamp(webp_method, 0, 6)
         if not tile_format in IMAGE_FORMATS:
             self.tile_format = DEFAULT_IMAGE_FORMAT
         self.resize_filter = resize_filter
@@ -408,7 +418,7 @@ class ImageCreator(object):
         if self.descriptor.width == width and self.descriptor.height == height:
             return self.image
         if (self.resize_filter is None) or (self.resize_filter not in RESIZE_FILTERS):
-            img_resized = self.image.resize((width, height), PIL.Image.ANTIALIAS)
+            img_resized = self.image.resize((width, height), RESIZE_FILTERS["lanczos"])
         else:
             img_resized = self.image.resize((width, height), RESIZE_FILTERS[self.resize_filter])
         if (self.resize_sharper):
@@ -451,6 +461,10 @@ class ImageCreator(object):
                 if self.descriptor.tile_format == "jpg":
                     jpeg_quality = int(self.image_quality * 100)
                     tile.save(tile_path, "JPEG", quality=jpeg_quality)
+                elif self.descriptor.tile_format == "webp":
+                    webp_quality = int(self.image_quality * 100)
+                    webp_method = 6 if self.webp_method is None else int(webp_method)
+                    tile.save(tile_path, "WEBP", quality=webp_quality, method=webp_method)
                 else:
                     tile.save(tile_path)
         # Create descriptor
@@ -548,13 +562,22 @@ def _remove(path):
 
 @retry(3)
 def safe_open(path):
-    # `urllib` in Python 2 supported both local paths as well as URLs. To
-    # continue this in Python 3, we manually add `file://` prefix if `path` is
-    # not a URL. This change is isolated to this function as we want the output
-    # XML to still have the original input paths instead of absolute paths:
-    has_scheme = bool(urlparse(path).scheme)
-    normalized_path = ("file://%s" % os.path.abspath(path)) if not has_scheme else path
-    return io.BytesIO(urllib.request.urlopen(normalized_path).read())
+    parsed = urlparse(path)
+
+    if parsed.scheme in ('http', 'https', 'ftp', 'file'):
+        normalized_path = path
+    else:
+        # Treat as local file path
+        abs_path = os.path.abspath(path)
+        if not os.path.isfile(abs_path):
+            raise FileNotFoundError(f"Local file does not exist: {abs_path}")
+        normalized_path = "file:///" + abs_path.replace("\\", "/")
+
+    try:
+        with urllib.request.urlopen(normalized_path) as response:
+            return io.BytesIO(response.read())
+    except Exception as e:
+        raise IOError(f"Failed to open image from path: {path} (resolved: {normalized_path})\nReason: {e}")
 
 
 ################################################################################
@@ -582,7 +605,7 @@ def main():
         "--tile_format",
         dest="tile_format",
         default=DEFAULT_IMAGE_FORMAT,
-        help="Image format of the tiles (jpg or png). Default: jpg",
+        help="Image format of the tiles (jpg or png or webp). Default: jpg",
     )
     parser.add_option(
         "-o",
@@ -605,7 +628,14 @@ def main():
         "--resize_filter",
         dest="resize_filter",
         default=DEFAULT_RESIZE_FILTER,
-        help="Type of filter for resizing (bicubic, nearest, bilinear, antialias (best). Default: antialias",
+        help="Type of filter for resizing (bicubic, nearest, bilinear, lanczos (best). Default: lanczos",
+    )
+    parser.add_option(
+        "-wm",
+        "--webp_method",
+        dest="--webp_method",
+        default=6,
+        help="webp method, 1-6, 6 is best but slowest",
     )
     parser.add_option(
         "-rsh"
@@ -613,7 +643,7 @@ def main():
         dest="resize_sharper",
         action="store_true",
         help="Sharpen image after downsizing when creating new tile level",
-        #TODO pass sharpening parameters
+        #TODO pass sharpening USM parameters like radius and amount
     )
     
     (options, args) = parser.parse_args()
@@ -637,6 +667,7 @@ def main():
         tile_format=options.tile_format,
         image_quality=options.image_quality,
         resize_filter=options.resize_filter,
+        webp_method=options.webp_method,
     )
     creator.create(source, options.destination)
 

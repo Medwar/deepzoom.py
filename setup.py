@@ -3,18 +3,18 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="DeepZoomTools",
-    version="2.0.0",
-    author="Daniel Gasienica",
-    author_email="daniel@gasienica.ch",
+    name="DeepZoomToolsMindat",
+    version="2.0.1",
+    author="Pavel.Martynov",
+    author_email="pavel.bw@gmail.com",
     description="Python tools for generating Deep Zoom images (DZI) and \
 collections (DZC) for the use with Silverlight Deep Zoom, Seadragon Ajax, \
-Seadragon Mobile, and OpenZoom.",
+Seadragon Mobile, and OpenZoom. Fork - added Pillow 11 compartibility, webp tile format",
     keywords="deepzoom seadragon dzi dzc seadragonajax seadragonmobile silverlightdeepzoom microsoft openzoom",
     packages=find_packages(),
     license="BSD 3-Clause License",
-    install_requires=["Pillow>=6"],
-    url="https://github.com/openzoom/deepzoom.py",
+    install_requires=["Pillow>=11"],
+    url="https://github.com/Mindat-org/deepzoom.py",
     include_package_data=True,
     classifiers=[
         "Intended Audience :: Developers",
