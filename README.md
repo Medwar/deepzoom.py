@@ -1,7 +1,7 @@
-# Changes of this fork, added::
-# - webp support
-# - Pillow 11 support
-# - option of sharpening after downscaling
+# What is added in this fork:
+- webp support
+- Pillow 11 support
+- option of sharpening after downscaling
 
 
 # deepzoom.py: Python Deep Zoom Tools
