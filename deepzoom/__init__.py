@@ -463,7 +463,7 @@ class ImageCreator(object):
                     tile.save(tile_path, "JPEG", quality=jpeg_quality)
                 elif self.descriptor.tile_format == "webp":
                     webp_quality = int(self.image_quality * 100)
-                    webp_method = 6 if self.webp_method is None else int(webp_method)
+                    webp_method = 6 if self.webp_method is None else int(self.webp_method)
                     tile.save(tile_path, "WEBP", quality=webp_quality, method=webp_method)
                 else:
                     tile.save(tile_path)
